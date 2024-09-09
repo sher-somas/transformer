@@ -15,3 +15,16 @@ class InputEmbeddings(nn.Module):
 
     def forward(self, x):
         return self.embedding(x) * math.sqrt(self.model_dimension)
+    
+class PositionalEmbedding(nn.Module):
+
+    def __init__(self, model_dimension: int, sequence_length, dropout: float) -> None:
+        """
+        sequence_length: Maximum length of the sentence.
+
+        """
+
+        super().__init__()
+        self.model_dimension = model_dimension
+        self.sequence_length = sequence_length
+        self.dropout = dropout
