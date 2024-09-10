@@ -53,7 +53,7 @@ class PositionalEmbedding(nn.Module):
 class LayerNormalization(nn.Module):
 
     def __init__(self, eps:float=10**-6) -> None:
-
+        super().__init__()
         self.eps = eps
         self.alpha = nn.Parameter(torch.ones(1)) # Multiplicative
         self.bias = nn.Parameter(torch.ones(1)) # Additive
@@ -64,5 +64,4 @@ class LayerNormalization(nn.Module):
         std = x.std(dim=-1, keepdim=True)
 
         return self.alpha * (x - mean) / (std + self.eps) * self.bias
-    
     
