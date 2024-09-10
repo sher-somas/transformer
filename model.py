@@ -65,3 +65,88 @@ class LayerNormalization(nn.Module):
 
         return self.alpha * (x - mean) / (std + self.eps) * self.bias
     
+class FeedForwardBlock(nn.Module):
+
+    def __init__(self, model_dimension: int, ff_dimension: int, dropout: float) -> None:
+        """
+        This class defines the Feed Forward block from the paper.
+        
+        paper config: 
+        model_dimension = 512
+        ff_dimension = 2048
+
+        transformation: 
+        (Batch, sequence_length, model_dimension) --> (Batch, sequence_length, ff_dimension) --> (Batch, sequence_length, model_dimension)
+        """
+        super().__init__()
+        self.linear_1 = nn.Linear(model_dimension, ff_dimension)
+        self.dropout = nn.Dropout(dropout)
+        self.linear_2 = nn.Linear(ff_dimension, model_dimension)
+
+    def forward(self, x):
+        
+        # x = self.linear_1(x)
+        # x = torch.relu(x)
+        # x = self.dropout(x)
+        # x = self.linear_2(x)
+
+        return self.linear_2(self.dropout(torch.relu(self.linear_1(x))))
+    
+
+class MultiHeadAttentionBlock(nn.Module):
+
+    def __init__(self, model_dimension: int, num_of_heads: int, dropout: float) -> None: 
+        super().__init__()
+        self.model_dimension = model_dimension
+        self.num_of_heads = num_of_heads
+        
+        assert model_dimension % num_of_heads == 0, "model_dimension must be divisible by num of heads" # Replace this with try / except 
+
+        self.d_k = model_dimension // num_of_heads
+        self.W_q = nn.Linear(model_dimension, model_dimension)
+        self.W_k = nn.Linear(model_dimension, model_dimension)
+        self.W_v = nn.Linear(model_dimension, model_dimension)
+
+        self.W_o = nn.Linear(model_dimension, model_dimension)
+        self.dropout = nn.Dropout(dropout)
+
+    @staticmethod
+    def calculate_attention_score(query, key, value, mask, dropout: nn.Dropout):
+
+        # dimension of the key matrix
+        d_k = query.shape[-1]
+
+        # (Batch, num_of_heads, seq_len, d_k) --> (Batch, num_of_heads, seq_len, seq_len)
+        attention_score = (query @ key.transpose(-2, -1)) / math.sqrt(d_k)
+
+        if mask is not None:
+            attention_score.masked_fill_(mask==0, -1e9)
+        
+        attention_scores = attention_scores.softmax(dim=-1) # (Batch, num_of_heads, seq_len, seq_len)
+
+        if dropout is not None:
+            attention_scores = dropout(attention_scores)
+
+        return (attention_scores @ value), attention_scores
+    
+    def forward(self, q, k , v, mask):
+
+        query = self.W_q(q) # (Batch, Seq_len, model_dimension) --> (Batch, Seq_len, model_dimension)
+        key = self.W_k(k) # (Batch, Seq_len, model_dimension) --> (Batch, Seq_len, model_dimension)
+        value = self.W_v(v) # (Batch, Seq_len, model_dimension) --> (Batch, Seq_len, model_dimension)
+
+
+        # (Batch, seq_len, model_dimension) --> (Batch, seq_len, num_of_heads, d_k) --> (Batch, num_heads, seq_len, d_k)
+        query = query.view(query.shape[0], query.shape[1], self.num_of_heads, self.d_k).transpose(1,2)
+        key = key.view(key.shape[0], key.shape[1], self.num_of_heads, self.d_k).transpose(1,2)
+        value = key.view(value.shape[0], value.shape[1], self.num_of_heads, self.d_k).transpose(1,2)
+
+        x, self.attention_scores = MultiHeadAttentionBlock.calculate_attention_score(query, key, value, mask. self.dropout)
+
+
+        # (Batch, num_of_heads, seq_len, d_k) --> (Batch, seq_len, num_of_heads, d_k) --> (Batch, seq_len, d_model)
+        x = x.transpose(1, 2).contiguous().view(x.shape[0], -1, self.num_of_heads * self.d_k)
+
+        # (Batch, seq_len, model_dimension) --> (Batch, seq_len, model_dimension)
+        return self.W_o(x)
+
